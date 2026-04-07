@@ -1,7 +1,17 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const fs   = require('fs');
+const os   = require('os');
 const { getSessions } = require('./index');
+
+const LIVE_FILE = path.join(os.homedir(), '.claude-dashboard', 'live.json');
+
+// Clear live.json on startup so the dashboard begins empty.
+// Sessions register themselves via the SessionStart hook as they run.
+try {
+  fs.mkdirSync(path.dirname(LIVE_FILE), { recursive: true });
+  fs.writeFileSync(LIVE_FILE, '{}');
+} catch {}
 
 const STATE_FILE = path.join(app.getPath('userData'), 'window-state.json');
 

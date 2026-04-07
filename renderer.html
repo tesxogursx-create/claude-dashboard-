@@ -71,7 +71,7 @@ body{
 .row1{display:flex;justify-content:space-between;margin-bottom:4px}
 .badge{font-size:10px;font-weight:600}
 .age{font-size:10px;color:#2e2e2e}
-.cwd{font-size:11px;color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px}
+.id{font-size:10px;color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px}
 .msg{font-size:10px;color:#ffffff;font-style:italic;
   display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;
   overflow:hidden;white-space:normal;word-break:break-all;line-height:1.4}
@@ -162,13 +162,15 @@ function age(ms){
 
 function cardHTML(s){
   const c = COLORS[s.activity] || COLORS.ended;
+  const folder = s.cwd.replace(/\\/g,'/').split('/').pop() || s.cwd;
+  const id = s.slug ? `${folder} · ${s.slug}` : folder;
   return `<div class="card" style="border-left-color:${c.border};background:${c.bg}">
     <div class="row1">
       <span class="badge" style="color:${c.dot}">${c.label}</span>
       <span class="age">${age(s.ageMs)}</span>
     </div>
-    ${s.lastMsg?`<div class="msg">${s.lastMsg.replace(/</g,'&lt;')}</div>`:
-      `<div class="msg" style="color:#2a2a2a">${s.cwd.replace(/\\/g,'/').split('/').pop()||s.cwd}</div>`}
+    <div class="id">${id.replace(/</g,'&lt;')}</div>
+    ${s.lastMsg?`<div class="msg">${s.lastMsg.replace(/</g,'&lt;')}</div>`:''}
   </div>`;
 }
 

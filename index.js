@@ -10,7 +10,12 @@ const LIVE_FILE = path.join(os.homedir(), '.claude-dashboard', 'live.json');
 
 function getLiveSessions() {
   try { return JSON.parse(fs.readFileSync(LIVE_FILE, 'utf8')); }
-  catch { return null; } // null = live.json doesn't exist yet → fall back to mtime
+  catch { return {}; }
+}
+
+function saveLiveSessions(live) {
+  fs.mkdirSync(path.dirname(LIVE_FILE), { recursive: true });
+  fs.writeFileSync(LIVE_FILE, JSON.stringify(live));
 }
 
 // --- Path resolution (mirrors Kanban Code's resolve_all_claude_dirs) ---
@@ -31,27 +36,6 @@ function getClaudeDirs() {
   return dirs;
 }
 
-// --- Activity detection (mirrors Kanban Code's ActivityTracker) ---
-const prevMtimes = new Map();
-
-function detectActivity(filePath) {
-  try {
-    const mtime = fs.statSync(filePath).mtimeMs;
-    const elapsed = Date.now() - mtime;
-
-    if (elapsed > 86400000) return 'stale';      // > 24h
-    if (elapsed > 300000)   return 'ended';      // > 5min
-
-    const prev = prevMtimes.get(filePath);
-    prevMtimes.set(filePath, mtime);
-
-    if (prev === undefined)    return elapsed < 10000 ? 'activelyWorking' : 'needsAttention';
-    if (mtime !== prev)        return 'activelyWorking';
-    return 'needsAttention';
-  } catch {
-    return 'stale';
-  }
-}
 
 // --- JSONL parsing ---
 function readTail(filePath, n = 60) {
@@ -74,9 +58,6 @@ function extractText(message) {
 }
 
 function parseSession(filePath, liveSessions) {
-  const mtimeActivity = detectActivity(filePath);
-  if (mtimeActivity === 'stale') return null;
-
   const lines = readTail(filePath);
   let cwd = '', sessionId = '', slug = '', lastMsg = '', isInteractive = false, lastType = '';
 
@@ -90,37 +71,22 @@ function parseSession(filePath, liveSessions) {
       if (e.type)      lastType = e.type;
       if (e.type === 'user') {
         const txt = extractText(e.message);
-        if (txt && !txt.includes('local-command-caveat')) lastMsg = txt;
+        if (txt && !txt.includes('local-command-caveat') && !txt.startsWith('<')) lastMsg = txt;
       }
     } catch {}
   }
 
   if (!sessionId || !isInteractive) return null;
+  if (!(sessionId in liveSessions)) return null;
 
   const stat = fs.statSync(filePath);
   const ageMs = Date.now() - stat.mtimeMs;
-
-  let activity;
-  if (liveSessions !== null && sessionId in liveSessions) {
-    // Confirmed open via hook → show, use lastType for status
-    activity = (lastType === 'user') ? 'activelyWorking' : 'needsAttention';
-  } else {
-    // Not in live.json → fall back to mtime
-    const ACTIVE_THRESHOLD = 30 * 60 * 1000; // 30 min
-    if (lastType === 'user' && ageMs < ACTIVE_THRESHOLD) {
-      // Last entry is user message AND file is recent → Claude still processing
-      activity = 'activelyWorking';
-    } else {
-      activity = mtimeActivity;
-      if (activity === 'ended') return null;
-    }
-  }
-
+  const activity = (lastType === 'user') ? 'activelyWorking' : 'needsAttention';
   return { filePath, sessionId, cwd, slug, lastMsg, activity, ageMs };
 }
 
 function getSessions() {
-  const liveSessions = getLiveSessions(); // null = fallback to mtime
+  const liveSessions = getLiveSessions();
   const all = [];
   for (const dir of getClaudeDirs()) {
     try {
