@@ -2,7 +2,7 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const fs   = require('fs');
 const os   = require('os');
-const { getSessions } = require('./index');
+const { Worker } = require('worker_threads');
 
 const LIVE_FILE = path.join(os.homedir(), '.claude-dashboard', 'live.json');
 
@@ -55,13 +55,14 @@ function createWindow() {
   win.on('moved',   () => saveState(win));
   win.on('resized', () => saveState(win));
 
-  // Push sessions every 3 s
-  const push = () => {
-    if (!win.isDestroyed()) win.webContents.send('sessions', getSessions());
-  };
-  push();
-  const timer = setInterval(push, 3000);
-  win.on('closed', () => clearInterval(timer));
+  // Push sessions every 3 s via worker thread (non-blocking)
+  const worker = new Worker(path.join(__dirname, 'worker.js'));
+  worker.on('message', (sessions) => {
+    if (!win.isDestroyed()) win.webContents.send('sessions', sessions);
+  });
+  worker.postMessage('get');
+  const timer = setInterval(() => worker.postMessage('get'), 3000);
+  win.on('closed', () => { clearInterval(timer); worker.terminate(); });
 }
 
 ipcMain.on('setIgnoreMouseEvents', (_, ignore) =>
