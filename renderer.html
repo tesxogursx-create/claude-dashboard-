@@ -52,8 +52,6 @@ body{
 
 /* ── 内容区（可滚动） ── */
 .body{
-  flex:1;
-  overflow-y:auto;
   overflow-x:hidden;
   padding:6px 8px 8px;
   scrollbar-width:thin;
@@ -139,12 +137,12 @@ pinBtn.addEventListener('click', () => {
 minBtn.addEventListener('click',   () => window.api.minimize());
 closeBtn.addEventListener('click', () => window.api.close());
 
-// ── 穿透鼠标：悬停在 UI 元素上时恢复捕获，离开时穿透 ──
+// ── 穿透鼠标：穿透模式下只有 pin 按钮恢复捕获，其余全部穿透 ──
 document.addEventListener('mousemove', e => {
   if (!pinned) return;
   const el = document.elementFromPoint(e.clientX, e.clientY);
-  const overUI = el && el !== document.documentElement && el !== document.body;
-  window.api.setIgnoreMouseEvents(!overUI);
+  const overPin = el && (el === pinBtn || pinBtn.contains(el));
+  window.api.setIgnoreMouseEvents(!overPin);
 });
 
 // ── 渲染 ──
@@ -186,6 +184,12 @@ window.api.onSessions(sessions => {
   body.innerHTML = visible===0
     ? '<div class="empty">无活跃 session</div>'
     : section('进行中',active)+section('等待输入',waiting);
+
+  // Auto-resize window to fit content
+  requestAnimationFrame(() => {
+    const h = document.querySelector('.container').scrollHeight + 2;
+    window.api.setHeight(h);
+  });
 });
 </script>
 </body>

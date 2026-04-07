@@ -64,6 +64,12 @@ ipcMain.on('setAlwaysOnTop', (_, flag) => {
 
 ipcMain.on('close',    () => win.close());
 ipcMain.on('minimize', () => win.minimize());
+ipcMain.on('setHeight', (_, h) => {
+  if (!win || win.isDestroyed()) return;
+  const [w] = win.getSize();
+  const clamped = Math.max(80, Math.min(h, 900));
+  win.setSize(w, clamped);
+});
 
 app.whenReady().then(createWindow);
 app.on('window-all-closed', () => app.quit());
