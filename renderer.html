@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+
+body{
+  background:transparent;
+  font-family:'Segoe UI',system-ui,sans-serif;
+  overflow:hidden;
+  user-select:none;
+}
+
+.container{
+  background:rgba(11,11,11,0.93);
+  border:1px solid rgba(255,255,255,0.07);
+  border-radius:8px;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+}
+
+/* ── 标题栏（可拖动） ── */
+.titlebar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:8px 10px;
+  -webkit-app-region:drag;
+  flex-shrink:0;
+  border-bottom:1px solid rgba(255,255,255,0.04);
+}
+.title{font-size:10px;font-weight:600;color:#444;letter-spacing:.6px}
+.right{display:flex;align-items:center;gap:6px;-webkit-app-region:no-drag}
+.clock{font-size:10px;color:#2e2e2e}
+
+/* ── 控制按钮 ── */
+.btn{
+  width:20px;height:20px;
+  border:none;border-radius:4px;
+  background:rgba(255,255,255,0.04);
+  color:#444;font-size:11px;
+  cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:background .15s,color .15s;
+  line-height:1;
+}
+.btn:hover{background:rgba(255,255,255,0.1);color:#888}
+.btn.pinned{background:rgba(251,191,36,0.18);color:#fbbf24}
+.btn.pinned:hover{background:rgba(251,191,36,0.28)}
+
+/* ── 内容区（可滚动） ── */
+.body{
+  flex:1;
+  overflow-y:auto;
+  overflow-x:hidden;
+  padding:6px 8px 8px;
+  scrollbar-width:thin;
+  scrollbar-color:#222 transparent;
+}
+
+.section-label{
+  font-size:8px;text-transform:uppercase;letter-spacing:1.5px;
+  color:#2a2a2a;margin:8px 0 4px;
+}
+.section-label:first-child{margin-top:2px}
+
+.card{
+  border-left:2px solid #333;border-radius:4px;
+  padding:7px 9px;margin-bottom:5px;
+}
+.row1{display:flex;justify-content:space-between;margin-bottom:4px}
+.badge{font-size:10px;font-weight:600}
+.age{font-size:10px;color:#2e2e2e}
+.cwd{font-size:11px;color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px}
+.msg{font-size:10px;color:#ffffff;font-style:italic;
+  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;
+  overflow:hidden;white-space:normal;word-break:break-all;line-height:1.4}
+
+.empty{font-size:12px;color:#282828;text-align:center;padding:24px 0}
+
+/* ── 穿透模式：容器变透明，只保留卡片 ── */
+body.pass-through .container{
+  background:transparent !important;
+  border-color:transparent !important;
+}
+body.pass-through .titlebar{
+  background:transparent;
+  border-color:transparent;
+  -webkit-app-region:no-drag;
+}
+body.pass-through .title,
+body.pass-through .clock{opacity:0}
+/* 只保留 pin 按钮可见 */
+body.pass-through .btn.close-btn,
+body.pass-through .btn.min-btn{opacity:0;pointer-events:none}
+body.pass-through .body{opacity:0.6}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="titlebar">
+    <span class="title">CLAUDE CODE</span>
+    <div class="right">
+      <span class="clock" id="clock"></span>
+      <button class="btn" id="pinBtn"   title="穿透点击">⊙</button>
+      <button class="btn min-btn" id="minBtn"   title="最小化">─</button>
+      <button class="btn close-btn" id="closeBtn" title="关闭">✕</button>
+    </div>
+  </div>
+  <div class="body" id="body">
+    <div class="empty">加载中…</div>
+  </div>
+</div>
+
+<script>
+let pinned = false;
+
+// ── 时钟 ──
+const clockEl = document.getElementById('clock');
+const tick = () => clockEl.textContent =
+  new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+tick(); setInterval(tick, 1000);
+
+// ── 按钮 ──
+const pinBtn   = document.getElementById('pinBtn');
+const minBtn   = document.getElementById('minBtn');
+const closeBtn = document.getElementById('closeBtn');
+
+pinBtn.addEventListener('click', () => {
+  pinned = !pinned;
+  document.body.classList.toggle('pass-through', pinned);
+  pinBtn.classList.toggle('pinned', pinned);
+  // 进入穿透模式：先开启 forward，mousemove 按需切换
+  window.api.setIgnoreMouseEvents(pinned);
+});
+
+minBtn.addEventListener('click',   () => window.api.minimize());
+closeBtn.addEventListener('click', () => window.api.close());
+
+// ── 穿透鼠标：悬停在 UI 元素上时恢复捕获，离开时穿透 ──
+document.addEventListener('mousemove', e => {
+  if (!pinned) return;
+  const el = document.elementFromPoint(e.clientX, e.clientY);
+  const overUI = el && el !== document.documentElement && el !== document.body;
+  window.api.setIgnoreMouseEvents(!overUI);
+});
+
+// ── 渲染 ──
+const COLORS = {
+  activelyWorking:{ border:'#22c55e', bg:'#0b1a0d', dot:'#22c55e', label:'● 进行中' },
+  needsAttention: { border:'#f59e0b', bg:'#1a140a', dot:'#f59e0b', label:'● 等待输入' },
+  ended:          { border:'#3b82f6', bg:'#0d1220', dot:'#3b82f6', label:'● 已结束' },
+};
+
+function age(ms){
+  const s=Math.floor(ms/1000);
+  if(s<60)  return s+'s';
+  const m=Math.floor(s/60);
+  if(m<60)  return m+'m';
+  return Math.floor(m/60)+'h';
+}
+
+function cardHTML(s){
+  const c = COLORS[s.activity] || COLORS.ended;
+  return `<div class="card" style="border-left-color:${c.border};background:${c.bg}">
+    <div class="row1">
+      <span class="badge" style="color:${c.dot}">${c.label}</span>
+      <span class="age">${age(s.ageMs)}</span>
+    </div>
+    ${s.lastMsg?`<div class="msg">${s.lastMsg.replace(/</g,'&lt;')}</div>`:
+      `<div class="msg" style="color:#2a2a2a">${s.cwd.replace(/\\/g,'/').split('/').pop()||s.cwd}</div>`}
+  </div>`;
+}
+
+function section(title, items){
+  return items.length===0?'':`<div class="section-label">${title} · ${items.length}</div>${items.map(cardHTML).join('')}`;
+}
+
+window.api.onSessions(sessions => {
+  const active  = sessions.filter(s=>s.activity==='activelyWorking');
+  const waiting = sessions.filter(s=>s.activity==='needsAttention');
+  const visible = active.length + waiting.length;
+  const body = document.getElementById('body');
+  body.innerHTML = visible===0
+    ? '<div class="empty">无活跃 session</div>'
+    : section('进行中',active)+section('等待输入',waiting);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "name": "claude-dashboard",
+  "version": "1.0.0",
+  "description": "Floating overlay dashboard for monitoring multiple Claude Code sessions",
+  "main": "electron-main.js",
+  "scripts": {
+    "start": "electron .",
+    "server": "node index.js"
+  },
+  "keywords": ["claude", "claude-code", "dashboard", "electron", "overlay"],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^41.1.1"
+  }
+}
