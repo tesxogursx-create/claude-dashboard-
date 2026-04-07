@@ -138,11 +138,16 @@ minBtn.addEventListener('click',   () => window.api.minimize());
 closeBtn.addEventListener('click', () => window.api.close());
 
 // ── 穿透鼠标：穿透模式下只有 pin 按钮恢复捕获，其余全部穿透 ──
+let lastIgnore = null;
 document.addEventListener('mousemove', e => {
   if (!pinned) return;
   const el = document.elementFromPoint(e.clientX, e.clientY);
   const overPin = el && (el === pinBtn || pinBtn.contains(el));
-  window.api.setIgnoreMouseEvents(!overPin);
+  const ignore = !overPin;
+  if (ignore !== lastIgnore) {
+    lastIgnore = ignore;
+    window.api.setIgnoreMouseEvents(ignore);
+  }
 });
 
 // ── 渲染 ──
